@@ -1,15 +1,21 @@
-package com.spring.bank.service.impl;
+package com.spring.bank.services.impl;
 
-import com.spring.bank.entity.Transaction;
-import com.spring.bank.entity.User;
+import com.spring.bank.entities.Transaction;
+import com.spring.bank.entities.User;
 import com.spring.bank.enums.Role;
-import com.spring.bank.repository.UserRepo;
-import com.spring.bank.service.UserService;
+import com.spring.bank.enums.Status;
+import com.spring.bank.repositories.UserRepo;
+import com.spring.bank.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -20,16 +26,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User createUser(User user) {
-        String encodedString = encode(user.getPassword());
-        user.setPassword(encodedString);
+        PasswordEncoder encoder = new BCryptPasswordEncoder();
+        String encoderPass = encoder.encode(user.getPassword());
+        user.setPassword(encoderPass);
         LocalDate date = LocalDate.now();
         user.setCreatedAt(date);
         user.setRole(Role.USER);
+        user.setStatus(Status.ACTIVE);
         return userRepo.save(user);
     }
 
     @Override
-    public User getUserByUsername(String username) {
+    public Optional<User> getUserByUsername(String username) {
         return userRepo.findByUsername(username);
     }
 
@@ -40,10 +48,10 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User checkLogin(User user) {
-        User logUser = getUserByUsername(user.getUsername());
-        if (logUser != null) {
+        Optional<User> logUser = getUserByUsername(user.getUsername());
+        if (logUser.isPresent()) {
             String userPassword = Base64.getEncoder().encodeToString(user.getPassword().getBytes());
-            if (userPassword.equals(logUser.getPassword())) {
+            if (userPassword.equals(logUser.get().getPassword())) {
                 // success
                 return user;
             } else {
@@ -52,6 +60,11 @@ public class UserServiceImpl implements UserService {
         } else {
             return null;
         }
+    }
+
+    @Override
+    public List<User> getAllUsers() {
+        return userRepo.findAll();
     }
 
     @Override
@@ -72,11 +85,11 @@ public class UserServiceImpl implements UserService {
     public User changeRoleOfUser(Integer loggedId, User toBeChangedUser) {
         User loggedUser = userRepo.findByid(loggedId);
         if (loggedUser.getRole().name().equals("ADMIN")) {
-            User userToChangeRole = userRepo.findByUsername(toBeChangedUser.getUsername());
-            if (userToChangeRole != null) {
-                userToChangeRole.setRole(toBeChangedUser.getRole());
-                userRepo.save(userToChangeRole);
-                return userToChangeRole;
+            Optional<User> userToChangeRole = userRepo.findByUsername(toBeChangedUser.getUsername());
+            if (userToChangeRole.isPresent()) {
+                userToChangeRole.get().setRole(toBeChangedUser.getRole());
+                userRepo.save(userToChangeRole.get());
+                return userToChangeRole.get();
             } else {
                 return null;
             }
@@ -85,10 +98,9 @@ public class UserServiceImpl implements UserService {
             return null;
         }
     }
-
-    public String encode(String pass){
-        return Base64.getEncoder().encodeToString(pass.getBytes());
+    @Override
+    public User loggedInUser(Authentication authentication) {
+        String username = ((org.springframework.security.core.userdetails.User) authentication.getPrincipal()).getUsername();
+        return userRepo.findByUsername(username).get();
     }
-
-
 }
